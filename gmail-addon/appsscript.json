@@ -1,0 +1,34 @@
+{
+  "timeZone": "America/New_York",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.addons.execute",
+    "https://www.googleapis.com/auth/gmail.addons.current.message.readonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.locale"
+  ],
+  "urlFetchWhitelist": [
+    "https://charcoal-contend-spongy.ngrok-free.dev/"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Threat Scanner",
+      "logoUrl": "https://www.gstatic.com/images/icons/material/system/2x/security_black_48dp.png",
+      "layoutProperties": {
+        "primaryColor": "#1a73e8"
+      },
+      "homepageTrigger": {
+        "runFunction": "buildHomepageCard"
+      }
+    },
+    "gmail": {
+      "contextualTriggers": [
+        {
+          "unconditional": {},
+          "onTriggerFunction": "onGmailMessageOpen"
+        }
+      ]
+    }
+  }
+}
