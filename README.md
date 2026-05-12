@@ -83,8 +83,8 @@ A monolithic scoring function would require modification every time a new threat
 
 ## 🛠️ Tech Stack
 
- - **Backend framework : Python 3.10+, FastAPI -** A modern, high-performance backend framework used to build the threat analysis API, offering asynchronous request handling and built-in data validation.
- - **Frontend runtime : Google Apps Script -** The only supported scripting environment for Gmail Add-ons. The V8 runtime enables modern JavaScript (const/let, destructuring, arrow functions) and gives direct access to `GmailApp`, `CardService`, `CacheService`, and `UrlFetchApp` — all required by this project.
+ - **Backend framework : Python 3.10+, FastAPI -** A modern, high-performance backend framework used to build the threat analysis API, offering asynchronous     request handling and built-in data validation.
+ - **Frontend runtime : Google Apps Script -** The only supported scripting environment for Gmail Add-ons. 
  - **Local tunneling : ngrok -** A secure tunneling tool that exposes the local development server to the internet, allowing the Google Apps Script frontend to communicate with the FastAPI backend in real-time.
 
 ---
@@ -176,4 +176,4 @@ Select `forceScopeAuthorization` in the function dropdown and click **Run (▶)*
 
 > **Green** = low risk · **Orange** = suspicious · **Red** = high risk — treat with caution.
 
----"# gmail-threat-scanner" 
+---
