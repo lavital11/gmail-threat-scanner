@@ -151,6 +151,9 @@ function postToBackend_(payload) {
       method:             'post',
       contentType:        'application/json',
       payload:            JSON.stringify(payload),
+      headers: {
+        'ngrok-skip-browser-warning': 'true'
+      },
       muteHttpExceptions: true,
       followRedirects:    false
     });
