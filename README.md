@@ -1,5 +1,7 @@
 # Threat Scanner — Gmail Add-on Email Analyzer
 
+Project Git Link - https://github.com/lavital11/gmail-threat-scanner
+
 A real-time phishing and maliciousness detection tool embedded directly into the Gmail UI. When a user opens an email, the add-on extracts its content, scores it across four independent threat analyzers, and renders a color-coded risk report in the Gmail side panel — all within seconds.
 
 ---
@@ -58,33 +60,23 @@ A real-time phishing and maliciousness detection tool embedded directly into the
 
 ---
 
-## 🧠 Design Decisions & Trade-offs
+## 🧠 Architecture Decisions & Trade-offs
 
-### 1. State Management via CacheService
+**1. Contextual Precision over Recall**
+* **Decision:** Strict heuristics often penalize legitimate corporate receipts. We implemented "Neutral Transaction Logic" (ignoring financial keywords if no threats exist) and Brand-Domain Whitelisting to suppress false alarms on trusted senders.
+* **Trade-off:** We intentionally sacrifice maximum heuristic sensitivity (Recall) to prioritize high accuracy (Precision). This significantly reduces "noise" on legitimate emails and builds user trust, at the slight risk of missing extremely subtle scams.
 
-The Gmail Add-on platform passes data between a contextual trigger and a button-action callback exclusively through `CardService.newAction().setParameters()`, which enforces a **500-character limit** on all values. A serialized email payload (sender, subject, full body, headers) far exceeds this limit.
+**2. Multi-Vector Synergy Scoring**
+* **Decision:** We realized that if an email triggered 3 different analyzers with only "medium" scores, the linear sum wasn't high enough to properly alert the user. Because multiple independent threat vectors waking up is inherently suspicious, we implemented a Synergy Multiplier to dynamically boost the final score.
+* **Trade-off:** This allows us to keep the maximum penalty of each individual module strictly bounded, but requires careful threshold tuning to ensure the multiplier doesn't over-inflate borderline cases.
 
-**Decision:** Extract the full payload inside `onGmailMessageOpen` — where the Gmail message access token is guaranteed to be present — serialize it to JSON, and store it in `CacheService.getUserCache()` under a `messageId` key with a 5-minute TTL. The button callback then reads the payload from cache using only the short `messageId` parameter.
+**3. Client-Side Buffering**
+* **Decision:** To bypass Apps Script's 500-character parameter limit, payloads are serialized into `CacheService` with a 5-minute TTL. Before caching, the client explicitly truncates email bodies to 45,000 characters.
+* **Trade-off:** This decoupled state management cleanly protects the FastAPI backend from memory-exhaustion DoS attacks (acting as a pre-buffer), at the minor risk of losing threat signals buried at the very end of abnormally large emails.
 
-This completely decouples token-dependent Gmail API access (contextual trigger) from network I/O (action callback), and sidesteps the parameter size constraint without any data loss.
-
-### 2. Client-Side Truncation as a Security Buffer
-
-The FastAPI backend enforces a hard 50,000-character limit on `body_text` and `body_html` via Pydantic validators, designed to prevent memory exhaustion from oversized inputs.
-
-**Decision:** The Apps Script frontend truncates both fields to **45,000 characters** before caching the payload. This 5,000-character safety margin ensures that even if serialization overhead, header fields, or encoding differences inflate the transmitted size, the backend validator is never exercised as a first line of defense. The client acts as a lightweight DoS buffer, keeping the backend's Pydantic validation as a secondary enforcement layer rather than the primary gate.
-
-### 3. Modular Analyzer Architecture for Scalability
-
-A monolithic scoring function would require modification every time a new threat signal is added, violating the Open/Closed Principle.
-
-**Decision:** Each threat vector is encapsulated in its own class (`IdentityAnalyzer`, `ContentAnalyzer`, `LinkAnalyzer`, `InfrastructureAnalyzer`) implementing a common `.analyze(payload) → AnalysisModuleResult` interface. The `EmailThreatScoringService` orchestrator iterates over a registered analyzer list, making it trivial to add, remove, or reorder analyzers without touching any other module. Score caps are enforced per-module (`MAX_SCORE`) and the total is capped at 100 by the aggregator.
-
-### 4. Synergy Scoring for Coordinated Attacks
-
-**Challenge:** Sophisticated phishing attacks distribute indicators across multiple vectors (e.g., minor sender mismatch + slight urgency + unusual routing) to avoid triggering hard limits on individual analyzers. A purely linear summation risks under-scoring multi-vector threats.
-
-**Decision:** Implemented a synergy scoring mechanism within the orchestrator. Instead of arbitrary score inflation within isolated modules, the system tracks the activation count of independent analyzers. If three or more modules trigger, a statistical multiplier is applied to the aggregate score, dynamically elevating the threat level for coordinated attacks while keeping isolated anomalies securely bounded.
+**4. Zero-Trust Input Validation**
+* **Decision:** We operate on a strict "Zero Trust" policy for any data hitting the FastAPI backend. We assume all incoming payloads from the client could be malicious, malformed, or tampered with. We utilize strict Pydantic models to enforce type safety, sanitize strings, and apply hard character limits (e.g., 50,000 chars) before the payload ever reaches the analysis engine.
+* **Trade-off:** While this rigid boundary validation might occasionally reject poorly encoded but legitimate emails (returning a 422 Unprocessable Entity error), it is a necessary compromise to ensure the scoring engine is immune to injection attacks and payload tampering.
 
 ---
 
@@ -184,3 +176,9 @@ Select `forceScopeAuthorization` in the function dropdown and click **Run (▶)*
 > **Green** = low risk · **Orange** = suspicious · **Red** = high risk — treat with caution.
 
 ---
+
+## 🗺️ Future Roadmap
+
+* **Persistent Intelligence Database:** Implementing a central DB to store and share malicious domains, suspicious links, and known threats.
+* **Advanced Link & Attachment Analysis:** Adding URL unshortening (e.g., bit.ly) and metadata scanning for attached PDF/Office files.
+* **LLM Integration:** Utilizing a local LLM to analyze semantic context and detect sophisticated attacks.

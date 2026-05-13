@@ -32,13 +32,17 @@ class ContentAnalyzer:
             "wire transfer", "bank account", "gift card", "payment", "invoice due",
             "חשבונית", "תשלום", "קבלה",
         )
+        # Words that indicate a routine transactional email (receipt, booking confirmation).
+        # Used together with the Safe Transaction rule below to reduce false positives.
+        safe_transaction_keywords = ("order", "booking", "receipt", "confirmation", "thank you for")
 
         score = 0
         reasons: list[str] = []
 
-        urgency_hits = sum(1 for keyword in urgency_keywords if keyword in text)
-        threat_hits = sum(1 for keyword in threat_keywords if keyword in text)
+        urgency_hits  = sum(1 for keyword in urgency_keywords  if keyword in text)
+        threat_hits   = sum(1 for keyword in threat_keywords   if keyword in text)
         financial_hits = sum(1 for keyword in financial_keywords if keyword in text)
+        safe_hits     = sum(1 for keyword in safe_transaction_keywords if keyword in text)
 
         if urgency_hits:
             score += min(10, urgency_hits * 5)
@@ -50,7 +54,14 @@ class ContentAnalyzer:
             score += min(12, financial_hits * 6)
             reasons.append("Contains direct financial transfer/payment requests.")
 
-        if score == 0:
+        # Safe Transaction rule: a financial keyword appearing in an email that
+        # shows no urgency and no threats is consistent with a legitimate receipt
+        # or booking confirmation. Reset the content score to avoid false positives.
+        if financial_hits and urgency_hits == 0 and threat_hits == 0 and safe_hits > 0:
+            score = 0
+            reasons = ["Financial keywords detected but context indicates a safe transactional email."]
+
+        if score == 0 and not reasons:
             reasons.append("No high-risk urgency/threat/financial wording detected.")
 
         return AnalysisModuleResult(

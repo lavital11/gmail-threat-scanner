@@ -25,10 +25,22 @@ class IdentityAnalyzer:
         local_part = sender_email.split("@")[0]
         domain = sender_email.split("@")[-1]
 
-        # If no name token appears in local part, it can indicate impersonation.
+        # Domains whose display names legitimately differ from the local-part
+        # (e.g. "Wolt Orders <no-reply@wolt.com>") — suppress the mismatch penalty.
+        trusted_service_domains = (
+            "google.com", "amazon.com", "microsoft.com", "apple.com",
+            "paypal.com", "spotify.com", "netflix.com", "facebook.com",
+            "mytrip.com", "wolt.com",
+        )
+        domain_is_trusted_service = any(domain.endswith(td) for td in trusted_service_domains)
+
+        # If no name token appears in local part, it can indicate impersonation —
+        # unless the sender is a known legitimate service that intentionally uses
+        # generic local-parts like "no-reply" or "orders".
         if name_tokens and not any(token in local_part for token in name_tokens):
-            score += 10
-            reasons.append("Sender name does not align with email local-part.")
+            if not domain_is_trusted_service:
+                score += 10
+                reasons.append("Sender name does not align with email local-part.")
 
         suspicious_brands = (
             "paypal", "microsoft", "google", "apple", "amazon", "bank",
