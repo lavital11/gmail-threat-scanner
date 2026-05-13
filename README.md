@@ -21,19 +21,19 @@ A real-time phishing and maliciousness detection tool embedded directly into the
 │  1. User opens email                                            │
 │       │                                                         │
 │       ▼                                                         │
-│  onGmailMessageOpen(e)   ← contextual trigger event            │
-│    • e.gmail.accessToken  — single-use current-message token   │
+│  onGmailMessageOpen(e)                                          │
+│    • e.gmail.accessToken  — single-use current-message token    │
 │    • GmailApp.getMessageById()                                  │
-│    • Extract: sender, subject, body_text, body_html, auth hdr  │
-│    • Truncate bodies to 45,000 chars                           │
-│    • CacheService.put(messageId → payload, TTL 5 min)          │
+│    • Extract: sender, subject, body_text, body_html, auth hdr   │
+│    • Truncate bodies to 45,000 chars                            │
+│    • CacheService.put(messageId → payload, TTL 5 min)           │
 │    • Return: initial card with "Analyze Email" button           │
 │       │                                                         │
 │  2. User clicks "Analyze Email"                                 │
 │       │                                                         │
 │       ▼                                                         │
-│  analyzeCurrentEmail(e)  ← action callback                     │
-│    • CacheService.get(messageId)  — no Gmail token needed      │
+│  analyzeCurrentEmail(e)  ← action callback                      │
+│    • CacheService.get(messageId)  — no Gmail token needed       │
 │    • POST /analyze  →  FastAPI backend (via ngrok tunnel)       │
 │    • Render result card                                         │
 └─────────────────────────────────────────────────────────────────┘
@@ -50,6 +50,7 @@ A real-time phishing and maliciousness detection tool embedded directly into the
 │        ContentAnalyzer       (max 25 pts)                       │
 │        LinkAnalyzer          (max 25 pts)                       │
 │        InfrastructureAnalyzer(max 20 pts)                       │
+│    • Applies Multi-Vector Synergy multiplier if >=3 trigger     │
 │    • Scores aggregated, capped at 100                           │
 │    • Returns: { "score": int, "verdict": str }                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -79,12 +80,18 @@ A monolithic scoring function would require modification every time a new threat
 
 **Decision:** Each threat vector is encapsulated in its own class (`IdentityAnalyzer`, `ContentAnalyzer`, `LinkAnalyzer`, `InfrastructureAnalyzer`) implementing a common `.analyze(payload) → AnalysisModuleResult` interface. The `EmailThreatScoringService` orchestrator iterates over a registered analyzer list, making it trivial to add, remove, or reorder analyzers without touching any other module. Score caps are enforced per-module (`MAX_SCORE`) and the total is capped at 100 by the aggregator.
 
+### 4. Synergy Scoring for Coordinated Attacks
+
+**Challenge:** Sophisticated phishing attacks distribute indicators across multiple vectors (e.g., minor sender mismatch + slight urgency + unusual routing) to avoid triggering hard limits on individual analyzers. A purely linear summation risks under-scoring multi-vector threats.
+
+**Decision:** Implemented a synergy scoring mechanism within the orchestrator. Instead of arbitrary score inflation within isolated modules, the system tracks the activation count of independent analyzers. If three or more modules trigger, a statistical multiplier is applied to the aggregate score, dynamically elevating the threat level for coordinated attacks while keeping isolated anomalies securely bounded.
+
 ---
 
 ## 🛠️ Tech Stack
 
- - **Backend framework : Python 3.10+, FastAPI -** A modern, high-performance backend framework used to build the threat analysis API, offering asynchronous     request handling and built-in data validation.
- - **Frontend runtime : Google Apps Script -** The only supported scripting environment for Gmail Add-ons. 
+ - **Backend framework : Python 3.10+, FastAPI -** A modern, high-performance backend framework used to build the threat analysis API, offering asynchronous request handling and built-in data validation.
+ - **Frontend runtime : Google Apps Script -** The only supported scripting environment for Gmail Add-ons.
  - **Local tunneling : ngrok -** A secure tunneling tool that exposes the local development server to the internet, allowing the Google Apps Script frontend to communicate with the FastAPI backend in real-time.
 
 ---
@@ -165,7 +172,7 @@ Select `forceScopeAuthorization` in the function dropdown and click **Run (▶)*
 
 ## ▶️ Using the Add-on
 
-1. Open [Gmail](https://mail.google.com).
+1. Open Gmail.
 2. Click on any email to open it.
 3. The **Threat Scanner** panel appears automatically in the right sidebar, showing the sender and subject.
 4. Click **Analyze Email**.

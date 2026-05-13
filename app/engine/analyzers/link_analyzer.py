@@ -11,7 +11,7 @@ from app.models.email_payload import EmailPayload
 
 
 class LinkAnalyzer:
-    """Inspect HTML anchor tags for raw IP URLs and mismatched link text."""
+    """Inspect HTML anchor tags for raw IP URLs, mismatched link text, and suspicious routing."""
 
     MAX_SCORE = 25
     HREF_RE = re.compile(
@@ -20,10 +20,14 @@ class LinkAnalyzer:
     )
     URL_RE = re.compile(r"https?://[^\s<>'\"]+", flags=re.IGNORECASE)
 
+    _SUSPICIOUS_KEYWORDS: tuple[str, ...] = ("login", "secure", "update", "inv", "verify", "auth")
+    _URL_SHORTENERS: tuple[str, ...] = ("bit.ly", "tinyurl.com", "t.co")
+
     def analyze(self, payload: EmailPayload) -> AnalysisModuleResult:
         html = payload.body_html or ""
         score = 0
         reasons: list[str] = []
+        suspicious_routing_flagged = False
 
         for match in self.HREF_RE.finditer(html):
             href = match.group("href").strip()
@@ -37,6 +41,17 @@ class LinkAnalyzer:
             if label_urls and not any(self._same_host(href, label_url) for label_url in label_urls):
                 score += 10
                 reasons.append("Displayed link text does not match target URL domain.")
+
+            # Check for suspicious routing keywords in the URL path or a known URL shortener.
+            if not suspicious_routing_flagged:
+                href_lower = href.lower()
+                parsed_host = urlparse(href).hostname or ""
+                is_suspicious_keyword = any(kw in href_lower for kw in self._SUSPICIOUS_KEYWORDS)
+                is_url_shortener = any(parsed_host == shortener for shortener in self._URL_SHORTENERS)
+                if is_suspicious_keyword or is_url_shortener:
+                    score += 10
+                    reasons.append("Link contains suspicious routing keywords or uses a URL shortener.")
+                    suspicious_routing_flagged = True  # Report once per email, not per link.
 
         if score == 0:
             reasons.append("No suspicious link patterns detected in HTML body.")

@@ -12,11 +12,26 @@ class ContentAnalyzer:
     MAX_SCORE = 25
 
     def analyze(self, payload: EmailPayload) -> AnalysisModuleResult:
+        # Hebrew characters are already case-insensitive, but .lower() is safe to call.
         text = payload.body_text.lower()
 
-        urgency_keywords = ("urgent", "immediately", "asap", "act now", "time sensitive")
-        threat_keywords = ("account suspended", "legal action", "security alert", "locked", "violation")
-        financial_keywords = ("wire transfer", "bank account", "gift card", "payment", "invoice due")
+        urgency_keywords = (
+            "urgent", "immediately", "asap", "act now", "time sensitive",
+            "renew", "update payment", "update payment information",
+            # Hebrew urgency signals
+            "דחוף", "מיידי", "פעולה נדרשת",
+            # Hebrew call-to-action phrases commonly used on phishing buttons/links
+            "לצפייה במסמך", "התחברות לחשבון", "לחץ כאן", "לעדכון פרטים", "כניסה לחשבון",
+        )
+        threat_keywords = (
+            "account suspended", "legal action", "security alert", "locked", "violation",
+            "expired", "payment failure", "disruption", "disruption to your service",
+            "חשבונך ננעל", "הושעה", "מסמך חדש",
+        )
+        financial_keywords = (
+            "wire transfer", "bank account", "gift card", "payment", "invoice due",
+            "חשבונית", "תשלום", "קבלה",
+        )
 
         score = 0
         reasons: list[str] = []
@@ -26,13 +41,13 @@ class ContentAnalyzer:
         financial_hits = sum(1 for keyword in financial_keywords if keyword in text)
 
         if urgency_hits:
-            score += min(10, urgency_hits * 4)
+            score += min(10, urgency_hits * 5)
             reasons.append("Contains urgency language intended to pressure quick action.")
         if threat_hits:
-            score += min(10, threat_hits * 5)
+            score += min(12, threat_hits * 6)
             reasons.append("Contains threatening or punitive language.")
         if financial_hits:
-            score += min(10, financial_hits * 5)
+            score += min(12, financial_hits * 6)
             reasons.append("Contains direct financial transfer/payment requests.")
 
         if score == 0:
