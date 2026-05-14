@@ -15,6 +15,14 @@ const ANALYZE_URL    = 'https://charcoal-contend-spongy.ngrok-free.dev/analyze';
 const BODY_MAX_CHARS = 45000;
 const CACHE_TTL      = 300; // seconds
 
+/** Maps backend analyzer keys to user-facing breakdown labels (with emoji). */
+const ANALYZER_FRIENDLY_NAMES_ = {
+  IdentityAnalyzer: '👤 Sender Identity',
+  ContentAnalyzer: '📝 Message Content',
+  LinkAnalyzer: '🔗 Suspicious Links',
+  InfrastructureAnalyzer: '🛡️ Infrastructure Security'
+};
+
 // ─── Contextual trigger ───────────────────────────────────────────────────────
 
 /**
@@ -243,7 +251,8 @@ function parseResponse_(status, body) {
  *   score >= 40  →  orange (#ef6c00)
  *   score <  40  →  green  (#188038)
  *
- * Permitted HTML tags: <b>, <br>, <font>. No icons.
+ * Permitted HTML tags: <b>, <br>, <font>. Analyzer keys are mapped to friendly
+ * labels (including emoji) via ANALYZER_FRIENDLY_NAMES_; unknown keys are unchanged.
  *
  * @param {number} score
  * @param {string} verdict  Raw explanation string from the backend.
@@ -277,7 +286,9 @@ function buildResultCard_(score, verdict) {
   let match;
 
   while ((match = moduleRegex.exec(cleaned)) !== null) {
-    const moduleName  = esc_(match[1].trim());
+    const rawAnalyzerKey = match[1].trim();
+    const friendlyLabel = ANALYZER_FRIENDLY_NAMES_[rawAnalyzerKey] || rawAnalyzerKey;
+    const moduleName  = esc_(friendlyLabel);
     const moduleScore = esc_(match[2].trim());
     const explanation = esc_(match[3].trim());
 
@@ -358,7 +369,7 @@ function buildHomepageCard() {
  * Do not invoke this function from any card or trigger.
  */
 function forceScopeAuthorization() {
-  UrlFetchApp.fetch('https://www.google.com', { method: 'get', muteHttpExceptions: true });
+  UrlFetchApp.fetch(ANALYZE_URL, { method: 'get', muteHttpExceptions: true });
   Logger.log('OAuth scope for external_request confirmed.');
 }
 

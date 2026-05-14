@@ -37,6 +37,8 @@ class LinkAnalyzer:
                 score += 12
                 reasons.append("Link uses a raw IP address instead of a domain.")
 
+            # Compare href host to URL(s) shown in link text: allow same org across
+            # www / apex / tracking subdomains; unrelated domains still mismatch.
             label_urls = self.URL_RE.findall(label)
             if label_urls and not any(self._same_host(href, label_url) for label_url in label_urls):
                 score += 10
@@ -75,11 +77,27 @@ class LinkAnalyzer:
             return False
 
     @staticmethod
+    def _normalize_hostname(host: str | None) -> str:
+        if not host:
+            return ""
+        return host.lower().rstrip(".")
+
+    @staticmethod
     def _same_host(url_a: str, url_b: str) -> bool:
+        """True when href and link-text URL are the same site (exact host, or subdomain of the other).
+
+        Tolerates www vs apex and tracking subdomains (e.g. click.* vs bare domain).
+        Unrelated domains never match; sibling hosts under a multi-tenant parent do not match each
+        other (e.g. a.github.io vs b.github.io) because neither hostname is a DNS subdomain of the other.
+        """
         try:
-            host_a = urlparse(url_a).hostname or ""
-            host_b = urlparse(url_b).hostname or ""
-            return host_a.lower() == host_b.lower() and host_a != ""
+            host_a = LinkAnalyzer._normalize_hostname(urlparse(url_a).hostname)
+            host_b = LinkAnalyzer._normalize_hostname(urlparse(url_b).hostname)
+            if not host_a or not host_b:
+                return False
+            if host_a == host_b:
+                return True
+            return host_a.endswith("." + host_b) or host_b.endswith("." + host_a)
         except Exception:
             # Fail closed: if parsing fails, treat as not matching.
             return False

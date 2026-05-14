@@ -14,6 +14,67 @@ class IdentityAnalyzer:
 
     MAX_SCORE = 30
 
+    # Role-based / automated local-parts: name vs local-part mismatch is usually not impersonation.
+    _GENERIC_LOCAL_PREFIXES: frozenset[str] = frozenset(
+        {
+            "automated",
+            "noreply",
+            "no-reply",
+            "support",
+            "info",
+            "marketing",
+            "sales",
+            "billing",
+            "admin",
+            "notifications",
+            "updates",
+        }
+    )
+
+    @staticmethod
+    def _normalize_alnum_lower(s: str) -> str:
+        """Lowercase and keep only a-z0-9 for fuzzy substring checks."""
+        return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+
+    @staticmethod
+    def _domain_stem_without_tld(domain: str) -> str:
+        """Hostname labels excluding the final TLD label (e.g. airbnb.com -> airbnb)."""
+        parts = (domain or "").lower().strip().strip(".").split(".")
+        if len(parts) < 2:
+            return parts[0] if parts else ""
+        return ".".join(parts[:-1])
+
+    @classmethod
+    def _sender_name_aligns_with_domain(
+        cls, sender_name: str, name_tokens: list[str], domain: str
+    ) -> bool:
+        """True if the display name matches the registrable host stem (substring, alnum-normalized)."""
+        stem_raw = cls._domain_stem_without_tld(domain)
+        stem_norm = cls._normalize_alnum_lower(stem_raw)
+        name_norm = cls._normalize_alnum_lower(sender_name)
+        if not stem_norm:
+            return False
+        if name_norm and (name_norm in stem_norm or stem_norm in name_norm):
+            return True
+        return any(
+            len(t) >= 3 and cls._normalize_alnum_lower(t) in stem_norm for t in name_tokens
+        )
+
+    @classmethod
+    def _generic_local_part(cls, local_part: str) -> bool:
+        base = local_part.split("+", 1)[0].strip().lower()
+        return base in cls._GENERIC_LOCAL_PREFIXES
+
+    @staticmethod
+    def _sender_name_aligns_with_local_part(name_tokens: list[str], local_part: str) -> bool:
+        """True if any name token appears in the local-part (alnum-normalized, case-insensitive)."""
+        lp_norm = IdentityAnalyzer._normalize_alnum_lower(local_part)
+        for t in name_tokens:
+            tn = IdentityAnalyzer._normalize_alnum_lower(t)
+            if tn and tn in lp_norm:
+                return True
+        return False
+
     def analyze(self, payload: EmailPayload) -> AnalysisModuleResult:
         sender_name = payload.sender_name.lower()
         sender_email = payload.sender_email.lower()
@@ -25,20 +86,12 @@ class IdentityAnalyzer:
         local_part = sender_email.split("@")[0]
         domain = sender_email.split("@")[-1]
 
-        # Domains whose display names legitimately differ from the local-part
-        # (e.g. "Wolt Orders <no-reply@wolt.com>") — suppress the mismatch penalty.
-        trusted_service_domains = (
-            "google.com", "amazon.com", "microsoft.com", "apple.com",
-            "paypal.com", "spotify.com", "netflix.com", "facebook.com",
-            "mytrip.com", "wolt.com",
-        )
-        domain_is_trusted_service = any(domain.endswith(td) for td in trusted_service_domains)
-
-        # If no name token appears in local part, it can indicate impersonation —
-        # unless the sender is a known legitimate service that intentionally uses
-        # generic local-parts like "no-reply" or "orders".
-        if name_tokens and not any(token in local_part for token in name_tokens):
-            if not domain_is_trusted_service:
+        # Name vs local-part: penalize only if domain, generic-local, and local-part checks all fail.
+        if name_tokens:
+            domain_ok = self._sender_name_aligns_with_domain(sender_name, name_tokens, domain)
+            generic_ok = self._generic_local_part(local_part)
+            local_ok = self._sender_name_aligns_with_local_part(name_tokens, local_part)
+            if not domain_ok and not generic_ok and not local_ok:
                 score += 10
                 reasons.append("Sender name does not align with email local-part.")
 

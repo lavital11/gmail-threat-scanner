@@ -63,8 +63,8 @@ A real-time phishing and maliciousness detection tool embedded directly into the
 ## 🧠 Architecture Decisions & Trade-offs
 
 **1. Contextual Precision over Recall**
-* **Decision:** Strict heuristics often penalize legitimate corporate receipts. We implemented "Neutral Transaction Logic" (ignoring financial keywords if no threats exist) and Brand-Domain Whitelisting to suppress false alarms on trusted senders.
-* **Trade-off:** We intentionally sacrifice maximum heuristic sensitivity (Recall) to prioritize high accuracy (Precision). This significantly reduces "noise" on legitimate emails and builds user trust, at the slight risk of missing extremely subtle scams.
+* **Decision:** Strict heuristics often penalize legitimate corporate emails. We replaced static, unscalable whitelists with **Dynamic Identity Alignment** (mathematically matching the sender's display name against the root domain) and implemented "Neutral Transaction Logic" (ignoring financial keywords if no threats exist).
+* **Trade-off:** We intentionally sacrifice maximum heuristic sensitivity (Recall) to prioritize high accuracy (Precision) and system scalability. This significantly reduces "noise" on legitimate emails and eliminates the maintenance overhead of hardcoded lists, at the slight risk of missing extremely subtle scams.
 
 **2. Multi-Vector Synergy Scoring**
 * **Decision:** We realized that if an email triggered 3 different analyzers with only "medium" scores, the linear sum wasn't high enough to properly alert the user. Because multiple independent threat vectors waking up is inherently suspicious, we implemented a Synergy Multiplier to dynamically boost the final score.
@@ -96,7 +96,15 @@ A real-time phishing and maliciousness detection tool embedded directly into the
 - [ngrok](https://ngrok.com/) account (free tier)
 - personal Gmail account
 
-### 1. Install dependencies
+### 1. Terminal 1 - Install dependencies
+
+Open a terminal and download the project code to your local machine, then navigate into the project folder:
+
+```bash
+git clone [https://github.com/lavital11/gmail-threat-scanner.git](https://github.com/lavital11/gmail-threat-scanner.git)
+cd gmail-threat-scanner
+```
+Once inside the project folder, install the required Python packages by running:
 
 ```bash
 pip install -r requirements.txt
@@ -104,33 +112,32 @@ pip install -r requirements.txt
 
 ### 2. Start the FastAPI server
 
+In the same terminal, start the server by running:
+
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-The API will be available at `http://localhost:8000`. Verify it is running:
+To verify the server is running, open your web browser and go to http://localhost:8000/docs. You should see the FastAPI documentation page appear.
 
-```bash
-curl http://localhost:8000/docs
-```
-
-### 3. Expose the server via ngrok
+### 3. Terminal 2 - Expose the server via ngrok
+Open a new, separate terminal window and run the following command to expose your local server to the internet:
 
 ```bash
 ngrok http 8000
 ```
 
-Copy the generated HTTPS forwarding URL (e.g., `https://xxxx-xxxx.ngrok-free.dev`).
+A screen will appear in your terminal showing the ngrok connection details. Look for the line that says "Forwarding". Copy the full HTTPS URL shown there (e.g., https://xxxx-xxxx.ngrok-free.dev).
 
 ### 4. Update the frontend URL
 
-In `gmail-addon/Code.gs`, replace the `ANALYZE_URL` constant:
+In gmail-addon/Code.gs, replace the ANALYZE_URL constant with the URL you copied, making sure to add /analyze at the end:
 
 ```javascript
 const ANALYZE_URL = 'https://YOUR-NGROK-SUBDOMAIN.ngrok-free.dev/analyze';
 ```
 
-In `gmail-addon/appsscript.json`, update the `urlFetchWhitelist` entry to match:
+In gmail-addon/appsscript.json, update the urlFetchWhitelist entry with the URL you copied, making sure to add a trailing slash /:
 
 ```json
 "urlFetchWhitelist": [
@@ -154,19 +161,25 @@ Go to [script.google.com](https://script.google.com), click **New project**.
 
 ### 3. Authorize the external_request scope
 
-Select `forceScopeAuthorization` in the function dropdown and click **Run (▶)**. Accept the permissions popup. This step only needs to be done once.
+1. In the Apps Script editor, look at the **top toolbar** (right next to the "Run" and "Debug" buttons).
+2. You will see a dropdown menu (it might currently display `analyzeCurrentEmail` or another function name). Click this dropdown and select `forceScopeAuthorization`.
+3. Click the **Run (▶)** button.
+4. An "Authorization Required" popup will appear. Click **Review Permissions**, select your Google account, then click **Advanced** -> **Go to Threat Scanner (unsafe)** -> **Allow**.
+
+*(Note: This forces Google to grant the necessary permissions for the add-on to send data to your local backend. This step only needs to be done once).*
 
 ### 4. Install the test deployment
 
-**Deploy → Test deployments → Type: Gmail Add-on → Click Install → Click Done**
-
----
+1. In the top right corner of the editor, click the blue **Deploy** button.
+2. Select **Test deployments** from the dropdown menu.
+3. Make sure the Application Type is set to **Gmail Add-on** (if not, click the gear/settings icon next to "Select type" and choose it).
+4. Click **Install**, and then click **Done**.
 
 ## ▶️ Using the Add-on
 
 1. Open Gmail.
 2. Click on any email to open it.
-3. The **Threat Scanner** panel appears automatically in the right sidebar, showing the sender and subject.
+3. The **Threat Scanner** panel appears automatically in the sidebar (right or left, depending on your Gmail language), showing the sender and subject.
 4. Click **Analyze Email**.
 5. Within a few seconds the panel updates with:
    - A color-coded **threat score** (0–100).
