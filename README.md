@@ -74,10 +74,6 @@ A real-time phishing and maliciousness detection tool embedded directly into the
 * **Decision:** To bypass Apps Script's 500-character parameter limit, payloads are serialized into `CacheService` with a 5-minute TTL. Before caching, the client explicitly truncates email bodies to 45,000 characters.
 * **Trade-off:** This decoupled state management cleanly protects the FastAPI backend from memory-exhaustion DoS attacks (acting as a pre-buffer), at the minor risk of losing threat signals buried at the very end of abnormally large emails.
 
-**4. Zero-Trust Input Validation**
-* **Decision:** We operate on a strict "Zero Trust" policy for any data hitting the FastAPI backend. We assume all incoming payloads from the client could be malicious, malformed, or tampered with. We utilize strict Pydantic models to enforce type safety, sanitize strings, and apply hard character limits (e.g., 50,000 chars) before the payload ever reaches the analysis engine.
-* **Trade-off:** While this rigid boundary validation might occasionally reject poorly encoded but legitimate emails (returning a 422 Unprocessable Entity error), it is a necessary compromise to ensure the scoring engine is immune to injection attacks and payload tampering.
-
 ---
 
 ## 🛠️ Tech Stack
